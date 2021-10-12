@@ -31,7 +31,8 @@
     "@opam/ppx_deriving": "5.2.1",
     "@opam/ppx_deriving_yojson": "3.6.1",
     "@opam/zarith": "1.11",
-    "@opam/digestif": "*"
+    "@opam/digestif": "*",
+    "@opam/base": "*"
   },
   "devDependencies": {
     "@opam/merlin": "*",
