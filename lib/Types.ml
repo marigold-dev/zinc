@@ -1,3 +1,11 @@
+module Nothing = struct
+  include Base.Nothing
+
+  let to_yojson = unreachable_code
+
+  let of_yojson _ = failwith "tried to create a void out of yojson"
+end
+
 module Z = struct
   include Z
 
@@ -50,17 +58,27 @@ module LMap = struct
   let to_yojson a m = bindings m |> association_list_to_yojson a
 end
 
-type zinc_instruction =
+type address = string [@@deriving show { with_path = false }, eq, yojson]
+
+type contract_operation = Transfer of Z.t * address
+[@@deriving show { with_path = false }, eq, yojson]
+
+type 'a zinc_instruction =
+  (*
+      Everything in here should be safe and trustworthy. Our assumption is that an adversary
+      can create whatever zinc they want and provide it as code to the interpreter.
+      The code is guaranteed
+  *)
   (* ====================
      zinc core operations
      ====================
   *)
   | Grab
   | Return
-  | PushRetAddr of zinc
+  | PushRetAddr of 'a zinc
   | Apply
   | Access of int
-  | Closure of zinc
+  | Closure of 'a zinc
   | EndLet
   (*
      ===============
@@ -76,6 +94,8 @@ type zinc_instruction =
   (* boolean *)
   | Bool of bool
   | Eq
+  (* misc *)
+  | String of string
   (* Crypto *)
   | Key of string
   | HashKey
@@ -94,36 +114,106 @@ type zinc_instruction =
   | Set_global
   | Get_global
   *)
-  (* tezos_specific operations *)
-  | Address of string
+  (*
+     ===========================
+     tezos_specific instructions
+     ===========================
+  *)
+  | Address of address
   | ChainID
-  (* Random handling stuff (need to find a better way to do that) *)
+  | Contract_opt
+  (* operations *)
+  | Operation of contract_operation
+  (* Adding this to make contracts easier to interpret even though I think it's technically unecessary  *)
   | Done
+  | Failwith
+  (* Extensions *)
+  | Extensions of 'a
 [@@deriving show { with_path = false }, eq, yojson]
 
-and zinc = zinc_instruction list
+and 'a zinc = 'a zinc_instruction list
 [@@deriving show { with_path = false }, eq, yojson]
 
-type program = (string * zinc) list
+type stack_env_only_zinc =
+  (*
+      Need to come up with a better name than stack_env_only_zinc,
+      it's for zinc "instructions" that can't be passed as code.
+      (Instead they can only be present in the stack or environment)
+  *)
+  | Contract of string * address
+[@@deriving show { with_path = false }, eq, yojson]
+
+type zinc_instruction_code = Nothing.t zinc_instruction
+[@@deriving show { with_path = false }, eq, yojson]
+
+type zinc_instruction_extended = stack_env_only_zinc zinc_instruction
+[@@deriving show { with_path = false }, eq, yojson]
+
+(*
+type zinc_code = { code : 'a. 'a zinc }
+
+let pp_zinc_code : Format.formatter -> zinc_code -> unit =
+ fun fmt { code } ->
+  Format.fprintf fmt "%a" (pp_zinc (fun _ -> Nothing.unreachable_code)) code
+
+let equal_zinc_code { code = a } { code = b } =
+  equal_zinc Nothing.unreachable_code a b
+
+let zinc_code_of_yojson input =
+  zinc_of_yojson (fun _ -> failwith "should be unreach") input
+  |> Result.map (fun code -> { code })
+let zinc_code_to_yojson { code } = zinc_to_yojson Nothing.unreachable_code code
+*)
+
+type zinc_code = Nothing.t zinc
+[@@deriving show { with_path = false }, eq, yojson]
+
+type zinc_extended = stack_env_only_zinc zinc
+[@@deriving show { with_path = false }, eq, yojson]
+
+type program = (string * Nothing.t zinc) list
 [@@deriving show { with_path = false }, eq, yojson]
 
 type env_item =
-  [ `Z of zinc_instruction | `Clos of clos | `Record of stack_item LMap.t ]
+  [ `Z of zinc_instruction_extended
+  | `Clos of clos
+  | `Record of stack_item LMap.t ]
 [@@deriving show, eq, yojson]
 
 and stack_item =
   [ (* copied from env_item *)
-    `Z of zinc_instruction
+    `Z of zinc_instruction_extended
   | `Clos of clos
   | `Record of stack_item LMap.t
   | (* marker to note function calls *)
-    `Marker of zinc * env_item list ]
+    `Marker of
+    stack_env_only_zinc zinc * env_item list ]
 [@@deriving show, eq]
 
-and clos = { code : zinc; env : env_item list } [@@deriving show, eq, yojson]
+and clos = { code : stack_env_only_zinc zinc; env : env_item list }
+[@@deriving show, eq, yojson]
 
 type env = env_item list [@@deriving show, eq, yojson]
 
 type stack = stack_item list [@@deriving show, eq, yojson]
 
-type zinc_state = zinc * env * stack [@@deriving show, eq, yojson]
+type zinc_state = zinc_code * env * stack [@@deriving show, eq, yojson]
+
+type 'a interpreter_input = 'a zinc * env * stack
+
+type interpreter_output = Success of env * stack | Failure of string
+[@@deriving show, eq, yojson]
+
+let rec generalize_zinc_instruction :
+          'a. zinc_instruction_code -> 'a zinc_instruction = function
+  | Extensions _ -> .
+  | PushRetAddr z -> PushRetAddr (generalize_zinc z)
+  | Closure z -> Closure (generalize_zinc z)
+  | ( Grab | Return | Apply | Access _ | EndLet | MakeRecord _ | RecordAccess _
+    | Num _ | Add | Bool _ | Eq | String _ | Key _ | HashKey | Hash _ | Bytes _
+    | Address _ | ChainID | Contract_opt | Operation _ | Done | Failwith ) as x
+    ->
+      x
+
+and generalize_zinc : 'a. zinc_code -> 'a zinc =
+ fun z -> List.map generalize_zinc_instruction z

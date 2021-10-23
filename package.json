@@ -5,7 +5,7 @@
   "license": "MIT",
   "esy": {
     "build": "dune build -p #{self.name}",
-    "buildDev": "refmterr dune build --promote-install-files --root . --only-package #{self.name}",
+    "buildDev": "dune build --promote-install-files --root . --only-package #{self.name}",
     "NOTE": "Optional release Section. Customizes result of `esy release`",
     "release": {
       "rewritePrefix": true,
@@ -18,7 +18,6 @@
     }
   },
   "scripts": {
-    "test": "esy x Hello",
     "format": "esy dune build @fmt --auto-promote",
     "doc": "esy dune build @doc"
   },
