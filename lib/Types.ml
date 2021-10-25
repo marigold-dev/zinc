@@ -89,6 +89,7 @@ type 'a zinc_instruction =
   | MakeRecord of label list
   | RecordAccess of label
   | MakeVariant of label
+  | MatchVariant of (label * 'a zinc) list
   (* math *)
   | Num of Z.t
   | Add
@@ -130,10 +131,10 @@ type 'a zinc_instruction =
   | Failwith
   (* Extensions *)
   | Extensions of 'a
-[@@deriving show { with_path = false }, eq, yojson]
+[@@deriving show { with_path = false }, eq, yojson, map]
 
 and 'a zinc = 'a zinc_instruction list
-[@@deriving show { with_path = false }, eq, yojson]
+[@@deriving show { with_path = false }, eq, yojson, map]
 
 type zinc_extension_constructors =
   (*
@@ -206,18 +207,11 @@ type interpreter_output = Success of env * stack | Failure of string
 [@@deriving show, eq, yojson]
 
 let rec generalize_zinc_instruction :
-          'a. zinc_instruction_code -> 'a zinc_instruction = function
-  | Extensions _ -> .
-  | PushRetAddr z -> PushRetAddr (generalize_zinc z)
-  | Closure z -> Closure (generalize_zinc z)
-  | ( Grab | Return | Apply | Access _ | EndLet | MakeRecord _ | MakeVariant _
-    | RecordAccess _ | Num _ | Add | Bool _ | Eq | String _ | Key _ | HashKey
-    | Hash _ | Bytes _ | Address _ | ChainID | Contract_opt | Operation _ | Done
-    | Failwith ) as x ->
-      x
+          'a. zinc_instruction_code -> 'a zinc_instruction =
+  map_zinc_instruction Nothing.unreachable_code
 
 and generalize_zinc : 'a. zinc_code -> 'a zinc =
- fun z -> List.map generalize_zinc_instruction z
+  map_zinc Nothing.unreachable_code
 
 type interpreter_context = {
   get_contract_opt : address -> (string * address option) option;
