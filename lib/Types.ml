@@ -219,4 +219,11 @@ let rec generalize_zinc_instruction :
 and generalize_zinc : 'a. zinc_code -> 'a zinc =
  fun z -> List.map generalize_zinc_instruction z
 
-type interpreter_context = { get_contract_opt : address -> stack_item }
+type interpreter_context = {
+  get_contract_opt : address -> (string * address option) option;
+}
+(* TODO: get_contract_opt needs to accept a type too *)
+
+module Utils = struct
+  let unit_record = `Record LMap.empty
+end
