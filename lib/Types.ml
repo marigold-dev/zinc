@@ -81,13 +81,14 @@ type 'a zinc_instruction =
   | Closure of 'a zinc
   | EndLet
   (*
-     ===============
-     zinc extensions
-     ===============
+     ================
+     Extra operations
+     ================
   *)
   (* ASTs *)
   | MakeRecord of label list
   | RecordAccess of label
+  | MakeVariant of label
   (* math *)
   | Num of Z.t
   | Add
@@ -134,19 +135,19 @@ type 'a zinc_instruction =
 and 'a zinc = 'a zinc_instruction list
 [@@deriving show { with_path = false }, eq, yojson]
 
-type stack_env_only_zinc =
+type zinc_extension_constructors =
   (*
-      Need to come up with a better name than stack_env_only_zinc,
+      Need to come up with a better name than zinc_extension_constructors,
       it's for zinc "instructions" that can't be passed as code.
       (Instead they can only be present in the stack or environment)
   *)
-  | Contract of string * address
+  | Contract of string * address option
 [@@deriving show { with_path = false }, eq, yojson]
 
 type zinc_instruction_code = Nothing.t zinc_instruction
 [@@deriving show { with_path = false }, eq, yojson]
 
-type zinc_instruction_extended = stack_env_only_zinc zinc_instruction
+type zinc_instruction_extended = zinc_extension_constructors zinc_instruction
 [@@deriving show { with_path = false }, eq, yojson]
 
 (*
@@ -168,7 +169,7 @@ let zinc_code_to_yojson { code } = zinc_to_yojson Nothing.unreachable_code code
 type zinc_code = Nothing.t zinc
 [@@deriving show { with_path = false }, eq, yojson]
 
-type zinc_extended = stack_env_only_zinc zinc
+type zinc_extended = zinc_extension_constructors zinc
 [@@deriving show { with_path = false }, eq, yojson]
 
 type program = (string * Nothing.t zinc) list
@@ -177,7 +178,8 @@ type program = (string * Nothing.t zinc) list
 type env_item =
   [ `Z of zinc_instruction_extended
   | `Clos of clos
-  | `Record of stack_item LMap.t ]
+  | `Record of stack_item LMap.t
+  | `Variant of label * stack_item ]
 [@@deriving show, eq, yojson]
 
 and stack_item =
@@ -185,21 +187,20 @@ and stack_item =
     `Z of zinc_instruction_extended
   | `Clos of clos
   | `Record of stack_item LMap.t
+  | `Variant of label * stack_item
   | (* marker to note function calls *)
     `Marker of
-    stack_env_only_zinc zinc * env_item list ]
+    zinc_extension_constructors zinc * env_item list ]
 [@@deriving show, eq]
 
-and clos = { code : stack_env_only_zinc zinc; env : env_item list }
+and clos = { code : zinc_extension_constructors zinc; env : env_item list }
 [@@deriving show, eq, yojson]
 
 type env = env_item list [@@deriving show, eq, yojson]
 
 type stack = stack_item list [@@deriving show, eq, yojson]
 
-type zinc_state = zinc_code * env * stack [@@deriving show, eq, yojson]
-
-type 'a interpreter_input = 'a zinc * env * stack
+type interpreter_input = zinc_code * env * stack [@@deriving show, eq, yojson]
 
 type interpreter_output = Success of env * stack | Failure of string
 [@@deriving show, eq, yojson]
@@ -209,11 +210,13 @@ let rec generalize_zinc_instruction :
   | Extensions _ -> .
   | PushRetAddr z -> PushRetAddr (generalize_zinc z)
   | Closure z -> Closure (generalize_zinc z)
-  | ( Grab | Return | Apply | Access _ | EndLet | MakeRecord _ | RecordAccess _
-    | Num _ | Add | Bool _ | Eq | String _ | Key _ | HashKey | Hash _ | Bytes _
-    | Address _ | ChainID | Contract_opt | Operation _ | Done | Failwith ) as x
-    ->
+  | ( Grab | Return | Apply | Access _ | EndLet | MakeRecord _ | MakeVariant _
+    | RecordAccess _ | Num _ | Add | Bool _ | Eq | String _ | Key _ | HashKey
+    | Hash _ | Bytes _ | Address _ | ChainID | Contract_opt | Operation _ | Done
+    | Failwith ) as x ->
       x
 
 and generalize_zinc : 'a. zinc_code -> 'a zinc =
  fun z -> List.map generalize_zinc_instruction z
+
+type interpreter_context = { get_contract_opt : address -> stack_item }
