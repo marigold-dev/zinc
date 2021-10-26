@@ -1,5 +1,5 @@
 (library
- (name zinc_types)
+ (name types)
  (public_name zinc.types)
  (flags
   (-w -40 -w +26))
@@ -12,3 +12,11 @@
    ppx_deriving.map
    ppx_deriving_yojson))
  (libraries ppx_deriving_yojson.runtime zarith digestif base))
+
+(library
+ (name interpreter)
+ (public_name zinc.interpreter)
+ (flags
+  (-w -40 -w +26))
+ (modules Interpreter)
+ (libraries types ppx_deriving_yojson.runtime zarith digestif base))
