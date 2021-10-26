@@ -111,12 +111,6 @@ type 'a zinc_instruction =
   (* serialization *)
   | Bytes of bytes
   (*
-  Thinking of replacing pack/unpack with this
-  | Ty of ty
-  | Set_global
-  | Get_global
-  *)
-  (*
      ===========================
      tezos_specific instructions
      ===========================
@@ -124,6 +118,7 @@ type 'a zinc_instruction =
   | Address of address
   | ChainID
   | Contract_opt
+  | Mutez of Z.t
   (* operations *)
   | Operation of contract_operation
   (* Adding this to make contracts easier to interpret even though I think it's technically unecessary  *)
