@@ -60,7 +60,7 @@ end
 
 type address = string [@@deriving show { with_path = false }, eq, yojson]
 
-type contract_operation = Transfer of Z.t * address
+type contract = string * address option
 [@@deriving show { with_path = false }, eq, yojson]
 
 type 'a zinc_instruction =
@@ -118,9 +118,8 @@ type 'a zinc_instruction =
   | Address of address
   | ChainID
   | Contract_opt
+  | MakeTransaction
   | Mutez of Z.t
-  (* operations *)
-  | Operation of contract_operation
   (* Adding this to make contracts easier to interpret even though I think it's technically unecessary  *)
   | Done
   | Failwith
@@ -137,7 +136,11 @@ type zinc_extension_constructors =
       it's for zinc "instructions" that can't be passed as code.
       (Instead they can only be present in the stack or environment)
   *)
-  | Contract of string * address option
+  | Contract of contract
+  | Operation of operation
+[@@deriving show { with_path = false }, eq, yojson]
+
+and operation = Transaction of Z.t * contract (* todo: add parameter *)
 [@@deriving show { with_path = false }, eq, yojson]
 
 type zinc_instruction_code = Nothing.t zinc_instruction
@@ -208,9 +211,7 @@ let rec generalize_zinc_instruction :
 and generalize_zinc : 'a. zinc_code -> 'a zinc =
   map_zinc Nothing.unreachable_code
 
-type interpreter_context = {
-  get_contract_opt : address -> (string * address option) option;
-}
+type interpreter_context = { get_contract_opt : address -> contract option }
 (* TODO: get_contract_opt needs to accept a type too *)
 
 module Utils = struct
