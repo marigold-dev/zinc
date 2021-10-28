@@ -58,6 +58,10 @@ module LMap = struct
   let to_yojson a m = bindings m |> association_list_to_yojson a
 end
 
+module Blake2B_20 = Digestif.Make_BLAKE2B (struct
+  let digest_size = 20
+end)
+
 type address = string [@@deriving show { with_path = false }, eq, yojson]
 
 type contract = string * address option
@@ -101,13 +105,7 @@ type 'a zinc_instruction =
   (* Crypto *)
   | Key of string
   | HashKey
-  | Hash of
-      (Digestif.BLAKE2B.t
-      [@to_yojson fun digest -> `String (Digestif.BLAKE2B.to_raw_string digest)]
-      [@of_yojson
-        function
-        | `String digest -> Ok (Digestif.BLAKE2B.of_raw_string digest)
-        | _ -> Error "string expected"])
+  | Hash of string
   (* serialization *)
   | Bytes of bytes
   (*
