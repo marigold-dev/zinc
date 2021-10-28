@@ -1,5 +1,5 @@
 (* pretty much copied from https://github.com/anchpop/ligolang/blob/zinc_work/src/passes/13deku-zincing/interpreter.ml *)
-open Types
+open Zinc_types
 
 let env_to_stack : env_item -> stack_item = function #env_item as x -> x
 
