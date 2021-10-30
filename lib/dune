@@ -1,4 +1,19 @@
 (library
+ (name zinc_utils)
+ (public_name zinc.utils)
+ (flags
+  (-w -40 -w +26))
+ (modules Zinc_utils)
+ (preprocess
+  (pps
+   ppx_deriving.show
+   ppx_deriving.ord
+   ppx_deriving.eq
+   ppx_deriving.map
+   ppx_deriving_yojson))
+ (libraries ppx_deriving_yojson.runtime zarith digestif base))
+
+(library
  (name zinc_types)
  (public_name zinc.types)
  (flags
@@ -11,7 +26,7 @@
    ppx_deriving.eq
    ppx_deriving.map
    ppx_deriving_yojson))
- (libraries ppx_deriving_yojson.runtime zarith digestif base))
+ (libraries zinc_utils ppx_deriving_yojson.runtime zarith digestif base))
 
 (library
  (name Zinc_interpreter)
@@ -19,4 +34,10 @@
  (flags
   (-w -40 -w +26))
  (modules Zinc_interpreter)
- (libraries zinc_types ppx_deriving_yojson.runtime zarith digestif base))
+ (libraries
+  zinc_utils
+  zinc_types
+  ppx_deriving_yojson.runtime
+  zarith
+  digestif
+  base))
