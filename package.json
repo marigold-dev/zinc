@@ -34,6 +34,7 @@
     "@opam/base": "*"
   },
   "devDependencies": {
+    "@opam/utop": "*",
     "@opam/merlin": "*",
     "@reason-native/rely": "*",
     "refmterr": "*",

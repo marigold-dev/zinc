@@ -58,6 +58,4 @@ module LMap = struct
   let to_yojson a m = bindings m |> association_list_to_yojson a
 end
 
-module Blake2B_20 = Digestif.Make_BLAKE2B (struct
-  let digest_size = 20
-end)
+let unit_record = `Record LMap.empty
