@@ -18,28 +18,27 @@
     }
   },
   "scripts": {
-    "format": "esy dune build @fmt --auto-promote",
-    "doc": "esy dune build @doc"
+    "format": "esy b dune build @fmt --auto-promote",
+    "doc": "esy b dune build @doc"
   },
   "dependencies": {
     "@opam/dune": ">=2.6",
-    "@reason-native/console": "*",
-    "@reason-native/pastel": "*",
-    "@esy-ocaml/reason": ">= 3.6.0 < 4.0.0",
-    "ocaml": "~4.10.0",
-    "@opam/ppx_deriving": "5.2.1",
-    "@opam/ppx_deriving_yojson": "3.6.1",
-    "@opam/zarith": "1.11",
+    "ocaml": "4.12.0",
+    "@opam/ppx_deriving": "*",
+    "@opam/ppx_deriving_yojson": "*",
+    "@opam/zarith": "*",
     "@opam/digestif": "*",
     "@opam/base": "*"
   },
   "devDependencies": {
     "@opam/merlin": "*",
-    "@reason-native/rely": "*",
-    "refmterr": "*",
     "@opam/odoc": "*",
     "@opam/ocaml-lsp-server": "*",
     "@opam/ocamlfind-secondary": "*",
-    "@opam/ocamlformat": "*"
+    "@opam/ocamlformat": "*",
+    "@opam/ocamlformat-rpc": "*",
+    "@opam/ppx_inline_test": "*",
+    "@opam/ppx_expect": "*",
+    "@opam/core_bench": "*"
   }
 }
