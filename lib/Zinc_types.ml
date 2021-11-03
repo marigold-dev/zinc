@@ -140,8 +140,8 @@ type interpreter_input = zinc_code * env * stack [@@deriving show, eq, yojson]
 type interpreter_output = Success of env * stack | Failure of string
 [@@deriving show, eq, yojson]
 
-let rec generalize_zinc_instruction :
-          'a. zinc_instruction_code -> 'a zinc_instruction =
+let generalize_zinc_instruction :
+      'a. zinc_instruction_code -> 'a zinc_instruction =
   map_zinc_instruction Nothing.unreachable_code
 
 and generalize_zinc : 'a. zinc_code -> 'a zinc =

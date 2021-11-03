@@ -1,12 +1,12 @@
 (* pretty much copied from https://github.com/anchpop/ligolang/blob/zinc_work/src/passes/13deku-zincing/interpreter.ml *)
 open Zinc_utils
-open Zinc_types
+open! Zinc_types
 
 let env_to_stack : env_item -> stack_item = function #env_item as x -> x
 
 let initial_state ?initial_stack:(stack = []) a = (a, [], stack)
 
-let interpret_zinc :
+let[@warning "-4"] interpret_zinc :
     interpreter_context -> interpreter_input -> interpreter_output =
  fun interpreter_context (code, env, stack) ->
   let apply_once (code : zinc_extended) (env : env_item list)
