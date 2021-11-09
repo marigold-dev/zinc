@@ -13,26 +13,33 @@ let[@warning "-4"] interpret_zinc :
       (stack : stack_item list) =
     let () =
       print_endline
-        (Format.asprintf "interpreting:\ncode:  %a\nenv:   %a\nstack: %a"
-           pp_zinc_extended code pp_env env pp_stack stack)
+        (Format.asprintf
+           "interpreting:\ncode:  %a\nenv:   %a\nstack: %a"
+           pp_zinc_extended
+           code
+           pp_env
+           env
+           pp_stack
+           stack)
     in
     match (code, env, stack) with
-    | Grab :: c, env, (#env_item as v) :: s -> `Some (c, v :: env, s)
-    | Grab :: c, env, `Marker (c', e') :: s ->
-        `Some (c', e', `Clos { code = Grab :: c; env } :: s)
-    | Grab :: _, _, [] -> failwith "nothing to grab!"
-    | Return :: _, _, `Z v :: `Marker (c', e') :: s -> `Some (c', e', `Z v :: s)
-    | Return :: _, _, `Clos { code = c'; env = e' } :: s -> `Some (c', e', s)
-    | PushRetAddr c' :: c, env, s -> `Some (c, env, `Marker (c', env) :: s)
-    | Apply :: _, _, `Clos { code = c'; env = e' } :: s -> `Some (c', e', s)
+    | (Grab :: c, env, (#env_item as v) :: s) -> `Some (c, v :: env, s)
+    | (Grab :: c, env, `Marker (c', e') :: s) ->
+        `Some (c', e', `Clos {code = Grab :: c; env} :: s)
+    | (Grab :: _, _, []) -> failwith "nothing to grab!"
+    | (Return :: _, _, `Z v :: `Marker (c', e') :: s) ->
+        `Some (c', e', `Z v :: s)
+    | (Return :: _, _, `Clos {code = c'; env = e'} :: s) -> `Some (c', e', s)
+    | (PushRetAddr c' :: c, env, s) -> `Some (c, env, `Marker (c', env) :: s)
+    | (Apply :: _, _, `Clos {code = c'; env = e'} :: s) -> `Some (c', e', s)
     (* Below here is just modern SECD *)
-    | Access n :: c, env, s -> (
+    | (Access n :: c, env, s) -> (
         let nth = Base.List.nth env n in
         match nth with
         | Some nth -> `Some (c, env, (nth |> env_to_stack) :: s)
         | None -> `Internal_error "Tried to access env item out of bounds")
-    | Closure c' :: c, env, s -> `Some (c, env, `Clos { code = c'; env } :: s)
-    | EndLet :: c, _ :: env, s -> `Some (c, env, s)
+    | (Closure c' :: c, env, s) -> `Some (c, env, `Clos {code = c'; env} :: s)
+    | (EndLet :: c, _ :: env, s) -> `Some (c, env, s)
     (* zinc extensions *)
     (* operations that jsut drop something on the stack haha *)
     | ( ((Num _ | Address _ | Key _ | Hash _ | Bool _ | String _ | Mutez _) as v)
@@ -41,45 +48,47 @@ let[@warning "-4"] interpret_zinc :
         s ) ->
         `Some (c, env, `Z v :: s)
     (* ADTs *)
-    | MakeRecord r :: c, env, s ->
+    | (MakeRecord r :: c, env, s) ->
         let rec zipExtra x y =
           match (x, y) with
-          | x :: xs, y :: ys ->
-              let zipped, extra = zipExtra xs ys in
+          | (x :: xs, y :: ys) ->
+              let (zipped, extra) = zipExtra xs ys in
               ((x, y) :: zipped, extra)
-          | [], y -> ([], y)
+          | ([], y) -> ([], y)
           | _ -> failwith "more items in left list than in right"
         in
-        let record_contents, new_stack = zipExtra r s in
+        let (record_contents, new_stack) = zipExtra r s in
         let record_contents =
-          Base.List.fold record_contents ~init:LMap.empty
+          Base.List.fold
+            record_contents
+            ~init:LMap.empty
             ~f:(fun acc (label, value) -> acc |> LMap.add label value)
         in
         `Some (c, env, `Record record_contents :: new_stack)
-    | RecordAccess accessor :: c, env, `Record r :: s ->
+    | (RecordAccess accessor :: c, env, `Record r :: s) ->
         `Some (c, env, (r |> LMap.find accessor) :: s)
-    | MatchVariant vs :: c, env, `Variant (Label label, item) :: s -> (
+    | (MatchVariant vs :: c, env, `Variant (Label label, item) :: s) -> (
         match
           Base.List.find_map vs ~f:(fun (Label match_arm, constructors) ->
               if String.equal match_arm label then Some constructors else None)
         with
         | None -> `Internal_error "inexhaustive match"
-        | Some match_code ->
-            `Some (List.concat [ match_code; c ], env, item :: s))
+        | Some match_code -> `Some (List.concat [match_code; c], env, item :: s)
+        )
     (* Math *)
-    | Add :: c, env, `Z (Num a) :: `Z (Num b) :: s ->
+    | (Add :: c, env, `Z (Num a) :: `Z (Num b) :: s) ->
         `Some (c, env, `Z (Num (Z.add a b)) :: s)
-    | Add :: c, env, `Z (Mutez a) :: `Z (Mutez b) :: s ->
+    | (Add :: c, env, `Z (Mutez a) :: `Z (Mutez b) :: s) ->
         `Some (c, env, `Z (Mutez (Z.add a b)) :: s)
     (* Booleans *)
-    | Eq :: c, env, a :: b :: s ->
+    | (Eq :: c, env, a :: b :: s) ->
         `Some (c, env, `Z (Bool (equal_stack_item a b)) :: s)
     (* Crypto *)
-    | HashKey :: c, env, `Z (Key _key) :: s ->
+    | (HashKey :: c, env, `Z (Key _key) :: s) ->
         let h = failwith "need to move this into interpreter_context" in
         `Some (c, env, `Z (Hash h) :: s)
     (* Tezos specific *)
-    | ChainID :: c, env, s ->
+    | (ChainID :: c, env, s) ->
         `Some
           ( c,
             env,
@@ -89,7 +98,7 @@ let[@warning "-4"] interpret_zinc :
               (let h = failwith "need to move this into interpreter_context" in
                Hash h)
             :: s )
-    | Contract_opt :: c, env, `Z (Address address) :: s ->
+    | (Contract_opt :: c, env, `Z (Address address) :: s) ->
         (* todo: abstract this into a function *)
         let contract =
           match interpreter_context.get_contract_opt address with
@@ -108,10 +117,10 @@ let[@warning "-4"] interpret_zinc :
             env,
             `Z (Extensions (Operation (Transaction (amount, contract)))) :: s )
     (* should be unreachable except when program is done *)
-    | [ Return ], _, _ -> `Done
-    | Failwith :: _, _, `Z (String s) :: _ -> `Failwith s
+    | ([Return], _, _) -> `Done
+    | (Failwith :: _, _, `Z (String s) :: _) -> `Failwith s
     (* should not be reachable *)
-    | x :: _, _, _ ->
+    | (x :: _, _, _) ->
         `Internal_error
           (Format.asprintf "%a unimplemented!" pp_zinc_instruction_extended x)
     | _ ->
