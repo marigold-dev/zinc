@@ -1,9 +1,9 @@
 open Zinc_utils
 
-type address = string [@@deriving show { with_path = false }, eq, yojson]
+type address = string [@@deriving show {with_path = false}, eq, yojson]
 
 type contract = string * address option
-[@@deriving show { with_path = false }, eq, yojson]
+[@@deriving show {with_path = false}, eq, yojson]
 
 type 'a zinc_instruction =
   (*
@@ -61,10 +61,10 @@ type 'a zinc_instruction =
   | Failwith
   (* Extensions *)
   | Extensions of 'a
-[@@deriving show { with_path = false }, eq, yojson, map]
+[@@deriving show {with_path = false}, eq, yojson, map]
 
 and 'a zinc = 'a zinc_instruction list
-[@@deriving show { with_path = false }, eq, yojson, map]
+[@@deriving show {with_path = false}, eq, yojson, map]
 
 type zinc_extension_constructors =
   (*
@@ -74,16 +74,16 @@ type zinc_extension_constructors =
   *)
   | Contract of contract
   | Operation of operation
-[@@deriving show { with_path = false }, eq, yojson]
+[@@deriving show {with_path = false}, eq, yojson]
 
 and operation = Transaction of Z.t * contract (* todo: add parameter *)
-[@@deriving show { with_path = false }, eq, yojson]
+[@@deriving show {with_path = false}, eq, yojson]
 
 type zinc_instruction_code = Nothing.t zinc_instruction
-[@@deriving show { with_path = false }, eq, yojson]
+[@@deriving show {with_path = false}, eq, yojson]
 
 type zinc_instruction_extended = zinc_extension_constructors zinc_instruction
-[@@deriving show { with_path = false }, eq, yojson]
+[@@deriving show {with_path = false}, eq, yojson]
 
 (*
 type zinc_code = { code : 'a. 'a zinc }
@@ -102,43 +102,66 @@ let zinc_code_to_yojson { code } = zinc_to_yojson Nothing.unreachable_code code
 *)
 
 type zinc_code = Nothing.t zinc
-[@@deriving show { with_path = false }, eq, yojson]
+[@@deriving show {with_path = false}, eq, yojson]
 
 type zinc_extended = zinc_extension_constructors zinc
-[@@deriving show { with_path = false }, eq, yojson]
+[@@deriving show {with_path = false}, eq, yojson]
 
 type program = (string * Nothing.t zinc) list
-[@@deriving show { with_path = false }, eq, yojson]
+[@@deriving show {with_path = false}, eq, yojson]
 
-type env_item =
-  [ `Z of zinc_instruction_extended
-  | `Clos of clos
-  | `Record of stack_item LMap.t
-  | `Variant of label * stack_item ]
-[@@deriving show, eq, yojson]
+module rec Env_item : sig
+  type t =
+    | Z of zinc_instruction_extended
+    | Clos of Clos.t
+    | Record of Stack_item.t LMap.t
+    | Variant of label * Stack_item.t
+  [@@deriving show, eq, yojson]
+end = struct
+  type t =
+    | Z of zinc_instruction_extended
+    | Clos of Clos.t
+    | Record of Stack_item.t LMap.t
+    | Variant of label * Stack_item.t
+  [@@deriving show, eq, yojson]
+end
 
-and stack_item =
-  [ (* copied from env_item *)
-    `Z of zinc_instruction_extended
-  | `Clos of clos
-  | `Record of stack_item LMap.t
-  | `Variant of label * stack_item
-  | (* marker to note function calls *)
-    `Marker of
-    zinc_extension_constructors zinc * env_item list ]
-[@@deriving show, eq]
+and Stack_item : sig
+  type t =
+    | Z of zinc_instruction_extended
+    | Clos of Clos.t
+    | Record of t LMap.t
+    | Variant of label * t
+    | Marker of zinc_extended * Env_item.t list
+  [@@deriving show, eq, yojson]
+end = struct
+  type t =
+    | Z of zinc_instruction_extended
+    | Clos of Clos.t
+    | Record of t LMap.t
+    | Variant of label * t
+    | Marker of zinc_extended * Env_item.t list
+  [@@deriving show, eq, yojson]
+end
 
-and clos = { code : zinc_extension_constructors zinc; env : env_item list }
-[@@deriving show, eq, yojson]
+and Clos : sig
+  type t = {code : zinc_extended; env : Env_item.t list}
+  [@@deriving show, eq, yojson]
+end = struct
+  type t = {code : zinc_extended; env : Env_item.t list}
+  [@@deriving show, eq, yojson]
+end
 
-type env = env_item list [@@deriving show, eq, yojson]
+type env = Env_item.t list [@@deriving show, eq, yojson]
 
-type stack = stack_item list [@@deriving show, eq, yojson]
+type stack = Stack_item.t list [@@deriving show, eq, yojson]
 
 type interpreter_input = zinc_code * env * stack [@@deriving show, eq, yojson]
 
-type interpreter_output = Success of env * stack | Failure of string
-[@@deriving show, eq, yojson]
+module Interpreter_output = struct
+  type t = Success of env * stack | Failure of string
+  [@@deriving show, eq, yojson]
+end
 
 let generalize_zinc_instruction :
       'a. zinc_instruction_code -> 'a zinc_instruction =
@@ -147,9 +170,11 @@ let generalize_zinc_instruction :
 and generalize_zinc : 'a. zinc_code -> 'a zinc =
   map_zinc Nothing.unreachable_code
 
-type interpreter_context = { get_contract_opt : address -> contract option }
+type interpreter_context = {get_contract_opt : address -> contract option}
 (* TODO: get_contract_opt needs to accept a type too *)
 
 module Utils = struct
-  let unit_record = `Record LMap.empty
+  let unit_record_stack = Stack_item.Record LMap.empty
+
+  let unit_record_env = Env_item.Record LMap.empty
 end

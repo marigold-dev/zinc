@@ -19,8 +19,7 @@ module Z = struct
    fun fmt v -> Format.fprintf fmt "%s" (Z.to_string v)
 end
 
-type label = Label of string
-[@@deriving show { with_path = false }, eq, yojson]
+type label = Label of string [@@deriving show {with_path = false}, eq, yojson]
 
 module LMap = struct
   include Map.Make (struct
@@ -47,7 +46,9 @@ module LMap = struct
     let new_pp ppf (k, v) =
       Format.fprintf ppf "@[<h>%a -> %a@]" pp_label k value v
     in
-    Format.fprintf ppf "%a"
+    Format.fprintf
+      ppf
+      "%a"
       (Format.pp_print_list
          ?pp_sep:(Some (fun fmt _ -> Format.pp_print_string fmt ", "))
          new_pp)
