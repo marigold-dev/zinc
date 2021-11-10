@@ -27,19 +27,18 @@ type 'a zinc_instruction =
      Extra operations
      ================
   *)
+  (* Core types *)
+  | Bool of bool
+  | Eq
+  | String of string
+  (* math *)
+  | Num of Z.t
+  | Add
   (* ASTs *)
   | MakeRecord of label list
   | RecordAccess of label
   | MakeVariant of label
   | MatchVariant of (label * 'a zinc) list
-  (* math *)
-  | Num of Z.t
-  | Add
-  (* boolean *)
-  | Bool of bool
-  | Eq
-  (* misc *)
-  | String of string
   (* Crypto *)
   | Key of string
   | HashKey
@@ -84,22 +83,6 @@ type zinc_instruction_code = Nothing.t zinc_instruction
 
 type zinc_instruction_extended = zinc_extension_constructors zinc_instruction
 [@@deriving show {with_path = false}, eq, yojson]
-
-(*
-type zinc_code = { code : 'a. 'a zinc }
-
-let pp_zinc_code : Format.formatter -> zinc_code -> unit =
- fun fmt { code } ->
-  Format.fprintf fmt "%a" (pp_zinc (fun _ -> Nothing.unreachable_code)) code
-
-let equal_zinc_code { code = a } { code = b } =
-  equal_zinc Nothing.unreachable_code a b
-
-let zinc_code_of_yojson input =
-  zinc_of_yojson (fun _ -> failwith "should be unreach") input
-  |> Result.map (fun code -> { code })
-let zinc_code_to_yojson { code } = zinc_to_yojson Nothing.unreachable_code code
-*)
 
 type zinc_code = Nothing.t zinc
 [@@deriving show {with_path = false}, eq, yojson]
