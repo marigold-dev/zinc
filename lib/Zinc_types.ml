@@ -27,19 +27,19 @@ type 'a zinc_instruction =
      Extra operations
      ================
   *)
+  (* Core types *)
+  | Unit
+  | Bool of bool
+  | Eq
+  | String of string
+  (* math *)
+  | Num of Z.t
+  | Add
   (* ASTs *)
   | MakeRecord of label list
   | RecordAccess of label
   | MakeVariant of label
   | MatchVariant of (label * 'a zinc) list
-  (* math *)
-  | Num of Z.t
-  | Add
-  (* boolean *)
-  | Bool of bool
-  | Eq
-  (* misc *)
-  | String of string
   (* Crypto *)
   | Key of string
   | HashKey
