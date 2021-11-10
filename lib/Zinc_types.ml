@@ -28,7 +28,6 @@ type 'a zinc_instruction =
      ================
   *)
   (* Core types *)
-  | Unit
   | Bool of bool
   | Eq
   | String of string
