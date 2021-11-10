@@ -1,16 +1,28 @@
-(* pretty much copied from https://github.com/anchpop/ligolang/blob/zinc_work/src/passes/13deku-zincing/interpreter.ml *)
 open Zinc_utils
 open! Zinc_types
 
-let env_to_stack : env_item -> stack_item = function #env_item as x -> x
+(* they have the same constructors *)
+external env_to_stack : Env_item.t -> Stack_item.t = "%identity"
+
+external stack_to_env_ext : Stack_item.t -> Env_item.t = "%identity"
+
+let stack_to_env = function
+  | Stack_item.Marker _ ->
+      failwith "type error, cant convert a stack_item into an env_item"
+  | Stack_item.(Clos _ | Record _ | Variant _ | Z _) as x -> stack_to_env_ext x
+
+type steps =
+  | Done
+  | Internal_error of string
+  | Failwith of string
+  | Continue of zinc_extended * env * stack
 
 let initial_state ?initial_stack:(stack = []) a = (a, [], stack)
 
 let[@warning "-4"] interpret_zinc :
-    interpreter_context -> interpreter_input -> interpreter_output =
+    interpreter_context -> interpreter_input -> Interpreter_output.t =
  fun interpreter_context (code, env, stack) ->
-  let apply_once (code : zinc_extended) (env : env_item list)
-      (stack : stack_item list) =
+  let apply_once (code : zinc_extended) (env : env) (stack : stack) =
     let () =
       print_endline
         (Format.asprintf
@@ -23,30 +35,34 @@ let[@warning "-4"] interpret_zinc :
            stack)
     in
     match (code, env, stack) with
-    | (Grab :: c, env, (#env_item as v) :: s) -> `Some (c, v :: env, s)
-    | (Grab :: c, env, `Marker (c', e') :: s) ->
-        `Some (c', e', `Clos {code = Grab :: c; env} :: s)
+    | (Grab :: c, env, Stack_item.Marker (c', e') :: s) ->
+        Continue (c', e', Stack_item.Clos {Clos.code = Grab :: c; env} :: s)
+    | (Grab :: c, env, v :: s) -> Continue (c, stack_to_env v :: env, s)
     | (Grab :: _, _, []) -> failwith "nothing to grab!"
-    | (Return :: _, _, `Z v :: `Marker (c', e') :: s) ->
-        `Some (c', e', `Z v :: s)
-    | (Return :: _, _, `Clos {code = c'; env = e'} :: s) -> `Some (c', e', s)
-    | (PushRetAddr c' :: c, env, s) -> `Some (c, env, `Marker (c', env) :: s)
-    | (Apply :: _, _, `Clos {code = c'; env = e'} :: s) -> `Some (c', e', s)
+    | (Return :: _, _, Stack_item.Z v :: Stack_item.Marker (c', e') :: s) ->
+        Continue (c', e', Stack_item.Z v :: s)
+    | (Return :: _, _, Stack_item.Clos {Clos.code = c'; env = e'} :: s) ->
+        Continue (c', e', s)
+    | (PushRetAddr c' :: c, env, s) ->
+        Continue (c, env, Stack_item.Marker (c', env) :: s)
+    | (Apply :: _, _, Stack_item.Clos {Clos.code = c'; env = e'} :: s) ->
+        Continue (c', e', s)
     (* Below here is just modern SECD *)
     | (Access n :: c, env, s) -> (
         let nth = Base.List.nth env n in
         match nth with
-        | Some nth -> `Some (c, env, (nth |> env_to_stack) :: s)
-        | None -> `Internal_error "Tried to access env item out of bounds")
-    | (Closure c' :: c, env, s) -> `Some (c, env, `Clos {code = c'; env} :: s)
-    | (EndLet :: c, _ :: env, s) -> `Some (c, env, s)
+        | Some nth -> Continue (c, env, (nth |> env_to_stack) :: s)
+        | None -> Internal_error "Tried to access env item out of bounds")
+    | (Closure c' :: c, env, s) ->
+        Continue (c, env, Stack_item.Clos {Clos.code = c'; env} :: s)
+    | (EndLet :: c, _ :: env, s) -> Continue (c, env, s)
     (* zinc extensions *)
     (* operations that jsut drop something on the stack haha *)
     | ( ((Num _ | Address _ | Key _ | Hash _ | Bool _ | String _ | Mutez _) as v)
         :: c,
         env,
         s ) ->
-        `Some (c, env, `Z v :: s)
+        Continue (c, env, Stack_item.Z v :: s)
     (* ADTs *)
     | (MakeRecord r :: c, env, s) ->
         let rec zipExtra x y =
@@ -64,75 +80,81 @@ let[@warning "-4"] interpret_zinc :
             ~init:LMap.empty
             ~f:(fun acc (label, value) -> acc |> LMap.add label value)
         in
-        `Some (c, env, `Record record_contents :: new_stack)
-    | (RecordAccess accessor :: c, env, `Record r :: s) ->
-        `Some (c, env, (r |> LMap.find accessor) :: s)
-    | (MatchVariant vs :: c, env, `Variant (Label label, item) :: s) -> (
+        Continue (c, env, Stack_item.Record record_contents :: new_stack)
+    | (RecordAccess accessor :: c, env, Stack_item.Record r :: s) ->
+        Continue (c, env, (r |> LMap.find accessor) :: s)
+    | (MatchVariant vs :: c, env, Stack_item.Variant (Label label, item) :: s)
+      -> (
         match
           Base.List.find_map vs ~f:(fun (Label match_arm, constructors) ->
               if String.equal match_arm label then Some constructors else None)
         with
-        | None -> `Internal_error "inexhaustive match"
-        | Some match_code -> `Some (List.concat [match_code; c], env, item :: s)
-        )
+        | None -> Internal_error "inexhaustive match"
+        | Some match_code ->
+            Continue (List.concat [match_code; c], env, item :: s))
     (* Math *)
-    | (Add :: c, env, `Z (Num a) :: `Z (Num b) :: s) ->
-        `Some (c, env, `Z (Num (Z.add a b)) :: s)
-    | (Add :: c, env, `Z (Mutez a) :: `Z (Mutez b) :: s) ->
-        `Some (c, env, `Z (Mutez (Z.add a b)) :: s)
+    | (Add :: c, env, Stack_item.Z (Num a) :: Stack_item.Z (Num b) :: s) ->
+        Continue (c, env, Stack_item.Z (Num (Z.add a b)) :: s)
+    | (Add :: c, env, Stack_item.Z (Mutez a) :: Stack_item.Z (Mutez b) :: s) ->
+        Continue (c, env, Stack_item.Z (Mutez (Z.add a b)) :: s)
     (* Booleans *)
     | (Eq :: c, env, a :: b :: s) ->
-        `Some (c, env, `Z (Bool (equal_stack_item a b)) :: s)
+        Continue (c, env, Stack_item.Z (Bool (Stack_item.equal a b)) :: s)
     (* Crypto *)
-    | (HashKey :: c, env, `Z (Key _key) :: s) ->
+    | (HashKey :: c, env, Stack_item.Z (Key _key) :: s) ->
         let h = failwith "need to move this into interpreter_context" in
-        `Some (c, env, `Z (Hash h) :: s)
+        Continue (c, env, Stack_item.Z (Hash h) :: s)
     (* Tezos specific *)
     | (ChainID :: c, env, s) ->
-        `Some
+        Continue
           ( c,
             env,
-            `Z
+            Stack_item.Z
               (* TODO: fix this usage of Digestif.BLAKE2B.hmac_string - should use an effect system or smth.
                  Also probably shouldn't use key like this. *)
               (let h = failwith "need to move this into interpreter_context" in
                Hash h)
             :: s )
-    | (Contract_opt :: c, env, `Z (Address address) :: s) ->
+    | (Contract_opt :: c, env, Stack_item.Z (Address address) :: s) ->
         (* todo: abstract this into a function *)
         let contract =
           match interpreter_context.get_contract_opt address with
           | Some (address, entrypoint) ->
-              `Variant
-                (Label "Some", `Z (Extensions (Contract (address, entrypoint))))
-          | None -> `Variant (Label "None", Utils.unit_record)
+              Stack_item.Variant
+                ( Label "Continue",
+                  Stack_item.Z (Extensions (Contract (address, entrypoint))) )
+          | None -> Stack_item.Variant (Label "None", Utils.unit_record_stack)
         in
-        `Some (c, env, contract :: s)
+        Continue (c, env, contract :: s)
     | ( MakeTransaction :: c,
         env,
-        r :: `Z (Mutez amount) :: `Z (Extensions (Contract contract)) :: s )
-      when equal_stack_item r Utils.unit_record ->
-        `Some
+        r
+        :: Stack_item.Z (Mutez amount)
+           :: Stack_item.Z (Extensions (Contract contract)) :: s )
+      when Stack_item.equal r Utils.unit_record_stack ->
+        Continue
           ( c,
             env,
-            `Z (Extensions (Operation (Transaction (amount, contract)))) :: s )
+            Stack_item.Z
+              (Extensions (Operation (Transaction (amount, contract))))
+            :: s )
     (* should be unreachable except when program is done *)
-    | ([Return], _, _) -> `Done
-    | (Failwith :: _, _, `Z (String s) :: _) -> `Failwith s
+    | ([Return], _, _) -> Done
+    | (Failwith :: _, _, Stack_item.Z (String s) :: _) -> Failwith s
     (* should not be reachable *)
     | (x :: _, _, _) ->
-        `Internal_error
+        Internal_error
           (Format.asprintf "%a unimplemented!" pp_zinc_instruction_extended x)
     | _ ->
-        `Internal_error
+        Internal_error
           (Format.asprintf "somehow ran out of code without hitting return!")
   in
   let code : zinc_extended = generalize_zinc code in
   let rec loop code env stack =
     match apply_once code env stack with
-    | `Done -> Success (env, stack)
-    | `Failwith s -> Failure s
-    | `Internal_error s -> failwith s
-    | `Some (code, env, stack) -> loop code env stack
+    | Done -> Interpreter_output.Success (env, stack)
+    | Failwith s -> Interpreter_output.Failure s
+    | Internal_error s -> failwith s
+    | Continue (code, env, stack) -> loop code env stack
   in
   loop code env stack
