@@ -121,7 +121,7 @@ let[@warning "-4"] interpret_zinc :
           match interpreter_context.get_contract_opt address with
           | Some (address, entrypoint) ->
               Stack_item.Variant
-                ( Label "Continue",
+                ( Label "Some",
                   Stack_item.Z (Extensions (Contract (address, entrypoint))) )
           | None -> Stack_item.Variant (Label "None", Utils.unit_record_stack)
         in
